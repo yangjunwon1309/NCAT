@@ -1,0 +1,7 @@
+pandas==2.2.3
+numpy==2.2.0
+matplotlib==3.10.0
+scikit-learn==1.6.0
+category-encoders==2.6.4
+catboost==1.2.7
+json

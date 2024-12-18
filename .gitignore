@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+*.sqlite3
+.DS_Store
+NCAT_catboost_regression
+NCAT_catboost_classfication
+catboost_Info
+examples.NCAT_catboost_regression
+examples.NCAT_catboost_classfication
+examples.catboost_Info
