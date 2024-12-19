@@ -4,16 +4,19 @@ from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error, m
 def relu(x):
     return np.maximum(0, x)
 
+
 def sigmoid(x):
     # Clipping to avoid overflow
     x = np.clip(x, -709, 709)
     return 1 / (1 + np.exp(-x))
 
+
 def leaky_relu(x):
-    return np.maximum(0.1*x, x)
+    return np.maximum(0.1 * x, x)
+
 
 class DNN_LM:
-    def __init__(self, input_dim, hidden_dim, hidden_dim_2, output_dim):
+    def __init__(self, input_dim, hidden_dim, hidden_dim_2, output_dim, obj="regression", layer1="", layer2=""):
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.hidden_dim_2 = hidden_dim_2
@@ -26,36 +29,49 @@ class DNN_LM:
         self.b3 = np.zeros((1, output_dim))
         self.w4 = np.random.randn(hidden_dim_2, output_dim)
         self.b4 = np.zeros((1, output_dim))
-        self.layer1 = "relu"
-        self.layer2 = "leaky_relu"
-        
+
+        if obj == "regression":
+            self.layer1 = "relu"
+            self.layer2 = "sigmoid"
+        else:
+            self.layer1 = "relu"
+            self.layer2 = "leaky_relu"
+
+        if len(layer1) > 0:
+            self.layer1 = layer1
+
+        if len(layer2) > 0:
+            self.layer2 = layer2
+
     def forward(self, X):
+        layer1_func = relu if self.layer1 == "relu" else leaky_relu
+        layer2_func = sigmoid if self.layer2 == "sigmoid" else leaky_relu
+
         self.z1 = X @ self.w1 + self.b1
-        self.a1 = relu(self.z1)
+        self.a1 = layer1_func(self.z1)
         self.z2 = self.a1 @ self.w2 + self.b2
-        self.a2 = leaky_relu(self.z2)
+        self.a2 = layer2_func(self.z2)
         self.z3 = self.a2 @ self.w3 + self.b3
         # self.a3 = leaky_relu(self.z3)
         # self.z4 = self.a3 @ self.w4 + self.b4
         return self.z3
 
-    
     def predict(self, X):
         return self.forward(X)
 
     def get_params(self):
         return np.hstack([self.w1.ravel(), self.b1.ravel(),
                           self.w2.ravel(), self.b2.ravel(),
-                          self.w3.ravel(), self.b3.ravel(),])
-                         # self.w4.ravel(), self.b4.ravel()
+                          self.w3.ravel(), self.b3.ravel(), ])
+        # self.w4.ravel(), self.b4.ravel()
 
     def set_params(self, params):
         input_dim, hidden_dim, hidden_dim_2, output_dim = self.input_dim, self.hidden_dim, self.hidden_dim_2, self.output_dim
         end_w1 = input_dim * hidden_dim
         end_b1 = end_w1 + hidden_dim
-        end_w2 = end_b1 + hidden_dim*hidden_dim_2
+        end_w2 = end_b1 + hidden_dim * hidden_dim_2
         end_b2 = end_w2 + hidden_dim_2
-        end_w3 = end_b2 + hidden_dim_2*output_dim
+        end_w3 = end_b2 + hidden_dim_2 * output_dim
         end_b3 = end_w3 + output_dim
         # end_w4 = end_b3 + hidden_dim_2 * output_dim
         # end_b4 = end_w4 + output_dim
@@ -69,11 +85,14 @@ class DNN_LM:
         # self.w4 = params[end_b3:end_w4].reshape(hidden_dim_2, output_dim)
         # self.b4 = params[end_w4:end_b4].reshape(1, output_dim)
 
+
 import numpy as np
 
-def softmax(x):
-    exp_x = np.exp(x - np.max(x))  # Numerical stability
+
+def softmax(x, T=1):
+    exp_x = np.exp((x - np.max(x)) / T)  # Numerical stability
     return exp_x / np.sum(exp_x)
+
 
 class SGD:
     def __init__(self, lr=0.1, momentum=0.9, nesterov=False, weight_decay=0.0005):
@@ -100,10 +119,12 @@ class SGD:
 
         return params
 
+
 def compute_loss_mse(y_true, y_pred, model, weight_decay=0.0005):
     mse_loss = np.mean((y_true - y_pred) ** 2)
     l2_loss = 0.5 * weight_decay * np.sum(model.get_params() ** 2)
     return mse_loss + l2_loss
+
 
 def compute_loss_mse_class(y_true, y_pred, model, weight_decay=0.0005):
     """
@@ -112,11 +133,13 @@ def compute_loss_mse_class(y_true, y_pred, model, weight_decay=0.0005):
     y_pred: Predicted values for each class (raw logits)
     """
     # Apply softmax to predictions
-    #y_pred = softmax(y_pred)
-    
+    # y_pred = softmax(y_pred)
+    y_true_pre = softmax(y_true, 1)
+    y_pred_pre = softmax(y_pred, 1)
     mse_loss = np.mean((np.array(y_true).reshape(1, -1) - np.array(y_pred).reshape(1, -1)) ** 2)
     l2_loss = 0.5 * weight_decay * np.sum(model.get_params() ** 2)
     return mse_loss + l2_loss
+
 
 def compute_loss_xentropy(y_true, y_pred, model, weight_decay=0.0005):
     """
@@ -124,25 +147,26 @@ def compute_loss_xentropy(y_true, y_pred, model, weight_decay=0.0005):
     y_true: List of probabilities for each class (softmaxed)
     y_pred: Predicted values for each class (raw logits)
     """
-    y_pred = softmax(y_pred)
-    y_true = softmax(y_true)
+    # y_pred = softmax(y_pred)
+    y_true = softmax(y_true, 1)
     xentropy_loss = -np.sum(y_true * np.log(y_pred + 1e-9)) / len(y_true)
     l2_loss = 0.5 * weight_decay * np.sum(model.get_params() ** 2)
     return xentropy_loss + l2_loss
+
 
 def compute_gradients(model, X, y, weight_decay=0.0005, loss_type="xentropy"):
     epsilon = 1e-5
     original_params = model.get_params()
     n_params = len(original_params)
     gradients = np.zeros(n_params)
-    
+
     if loss_type == "mse":
         loss_fn = compute_loss_mse
     elif loss_type == "mse_class":
         loss_fn = compute_loss_mse_class
     elif loss_type == "xentropy":
         loss_fn = compute_loss_xentropy
-    
+
     for i in range(n_params):
         perturb = np.zeros(n_params)
         perturb[i] = epsilon
@@ -155,10 +179,9 @@ def compute_gradients(model, X, y, weight_decay=0.0005, loss_type="xentropy"):
     return gradients
 
 
-
 def stochastic_train(
-    model, X, y, batch_size=32, tolerance=2e-2, max_iterations=10000, lr=0.1, momentum=0.9, 
-    weight_decay=0.0005, decay_rate=0.001, loss_type="xentropy"
+        model, X, y, batch_size=32, tolerance=2e-2, max_iterations=10000, lr=0.1, momentum=0.9,
+        weight_decay=0.0005, decay_rate=0.001, loss_type="xentropy"
 ):
     optimizer = SGD(lr=lr, momentum=momentum, weight_decay=weight_decay)
     n_samples = X.shape[0]
@@ -168,7 +191,7 @@ def stochastic_train(
     while loss > tolerance and iteration < max_iterations:
         # Learning rate schedule
         optimizer.lr = lr / (1 + decay_rate * iteration)
-        
+
         # Stochastic feature selection
         batch_indices = np.random.choice(n_samples, batch_size, replace=False)
         X_batch = X[batch_indices]
@@ -185,17 +208,17 @@ def stochastic_train(
         y_predict = model.predict(X)
         loss_fn = compute_loss_mse if loss_type == "mse" else compute_loss_xentropy
         loss = loss_fn(y, y_predict, model, weight_decay)
-        
-        if iteration % 100 == 0 :
-            print(f"Iteration {iteration}, Loss: {loss:.4f}, Learning Rate: {optimizer.lr:.6f}, rmse: {np.sqrt(mean_squared_error(y, y_predict))}, r2: {r2_score(y, y_predict)}")
-        
+
+        if iteration % 100 == 0:
+            print(
+                f"Iteration {iteration}, Loss: {loss:.4f}, Learning Rate: {optimizer.lr:.6f}, rmse: {np.sqrt(mean_squared_error(y, y_predict))}, r2: {r2_score(y, y_predict)}")
+
         iteration += 1
 
     if loss <= tolerance:
         print("Training converged.")
     else:
         print("Reached maximum iterations without converging.")
-
 
 
 class Adam:
@@ -226,9 +249,9 @@ class Adam:
         self.v = self.beta2 * self.v + (1 - self.beta2) * np.square(gradients)
 
         # Compute bias-corrected first moment estimate
-        m_hat = self.m / (1 - self.beta1**self.t)
+        m_hat = self.m / (1 - self.beta1 ** self.t)
         # Compute bias-corrected second raw moment estimate
-        v_hat = self.v / (1 - self.beta2**self.t)
+        v_hat = self.v / (1 - self.beta2 ** self.t)
 
         # Update parameters
         params -= self.lr * m_hat / (np.sqrt(v_hat) + self.epsilon)
@@ -236,10 +259,9 @@ class Adam:
         return params
 
 
-
 def adam_train(
-    model, X, y, batch_size=32, tolerance_r2= 0.85, tolerance_rmse = 0.00001, max_iterations=10000, 
-    lr=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8, weight_decay=0.0, loss_type= "mse_class"
+        model, X, y, batch_size=32, tolerance_r2=0.85, tolerance_rmse=0.00001, max_iterations=10000, min_iterations = 3000,
+        lr=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8, weight_decay=0.0, loss_type="mse_class", multi=False
 ):
     optimizer = Adam(lr=lr, beta1=beta1, beta2=beta2, epsilon=epsilon, weight_decay=weight_decay)
     n_samples = X.shape[0]
@@ -247,16 +269,19 @@ def adam_train(
     loss = float('inf')
     r2 = 0
     rmse = float('inf')
-    
-    while (r2 < tolerance_r2 or rmse > tolerance_rmse) and iteration < max_iterations :
+
+    min_iter_ths = True
+    while (iteration < min_iterations or
+           ((r2 < tolerance_r2 or rmse > tolerance_rmse) and iteration < max_iterations)):
+        # 반복 작업 코드
         # Stochastic batch selection
         batch_indices = np.random.choice(n_samples, batch_size, replace=False)
         X_batch = X[batch_indices]
         y_batch = y[batch_indices]
-        
+
         try:
             # Compute gradients
-            gradients = compute_gradients(model, X_batch, y_batch, weight_decay, loss_type= loss_type)
+            gradients = compute_gradients(model, X_batch, y_batch, weight_decay, loss_type=loss_type)
             params = model.get_params()
 
             # Update parameters
@@ -266,32 +291,45 @@ def adam_train(
             y_predict = model.predict(X)
             r2 = r2_score(y, y_predict)
             rmse = np.sqrt(mean_squared_error(y, y_predict))
-        
+
         except Exception as e:
             print("y shape: ", y.shape, "y_pred shape: ", y_predict.shape)
             print(e)
-        if iteration % 100 == 0 :
-            print(f"Iteration {iteration}, Learning Rate: {optimizer.lr:.6f}, rmse: {np.sqrt(mean_squared_error(y, y_predict))}, r2: {r2_score(y, y_predict)}")
+        if multi == False:
+            if iteration % 100 == 0:
+                print(
+                    f"Iteration {iteration}, Learning Rate: {optimizer.lr:.6f}, rmse: {np.sqrt(mean_squared_error(y, y_predict))}, r2: {r2_score(y, y_predict)}")
+        else:
+            pass
+            # if iteration % 1000 == 0 :
+            # print(f"Iteration {iteration}, Learning Rate: {optimizer.lr:.6f}, rmse: {np.sqrt(mean_squared_error(y, y_predict))}, r2: {r2_score(y, y_predict)}")
 
         iteration += 1
 
-    if  r2 < tolerance_r2 and rmse > tolerance_rmse:
+    if multi:
+        print(
+            f"final status as : Iteration {iteration}, Learning Rate: {optimizer.lr:.6f}, rmse: {np.sqrt(mean_squared_error(y, y_predict))}, r2: {r2_score(y, y_predict)}")
+
+    if r2 < tolerance_r2 and rmse > tolerance_rmse:
         print("Training converged.")
     else:
         print("Reached maximum iterations without converging.")
 
     return model
 
+
 from multiprocessing import Pool
+
 
 def compute_gradients_batch(args):
     """Helper function to compute gradients for a single batch."""
     model, X_batch, y_batch, weight_decay = args
     return compute_gradients(model, X_batch, y_batch, weight_decay)
 
+
 def adam_train_kfold(
-    model, X, y, batch_size=32, N=5, tolerance=1e-4, max_iterations=3000,
-    lr=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8, weight_decay=0.0, n_cores = 4, loss_type = "mse"
+        model, X, y, batch_size=32, N=5, tolerance=1e-4, max_iterations=3000,
+        lr=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8, weight_decay=0.0, n_cores=4, loss_type="mse"
 ):
     optimizer = Adam(lr=lr, beta1=beta1, beta2=beta2, epsilon=epsilon, weight_decay=weight_decay)
     n_samples = X.shape[0]
@@ -329,7 +367,8 @@ def adam_train_kfold(
         loss = loss_fn(y, y_predict, model, weight_decay)
 
         if iteration % 100 == 0 or loss <= tolerance:
-            print(f"Iteration {iteration}, Loss: {loss:.4f}, Learning Rate: {optimizer.lr:.6f}, RMSE: {np.sqrt(mean_squared_error(y, y_predict))}, R2: {r2_score(y, y_predict)}")
+            print(
+                f"Iteration {iteration}, Loss: {loss:.4f}, Learning Rate: {optimizer.lr:.6f}, RMSE: {np.sqrt(mean_squared_error(y, y_predict))}, R2: {r2_score(y, y_predict)}")
 
         iteration += 1
 
